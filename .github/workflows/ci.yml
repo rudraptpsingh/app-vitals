@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        node-version: [18.x, 20.x, 22.x]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Build Rust native addon
+        run: cargo build --release
+
+      - name: Copy native binary
+        run: |
+          if [ -f target/release/libapp_vitals_native.dylib ]; then
+            cp target/release/libapp_vitals_native.dylib app-vitals.node
+          elif [ -f target/release/libapp_vitals_native.so ]; then
+            cp target/release/libapp_vitals_native.so app-vitals.node
+          fi
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Run Test Suite
+        run: npm test
