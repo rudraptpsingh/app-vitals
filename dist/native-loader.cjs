@@ -3,22 +3,61 @@
 const path = require('node:path')
 const fs = require('node:fs')
 
+const PACKAGE_NAME = 'electron-app-vitals'
+const BINARY = `app-vitals.${process.platform}-${process.arch}.node`
+
+/**
+ * Directories that may hold the package's files. `__dirname` is wrong once a
+ * bundler (esbuild, webpack, vite) inlines this file into an app's main
+ * bundle, so the package root is also resolved from node_modules.
+ */
+function packageRoots() {
+  const roots = [path.join(__dirname, '..')]
+  try {
+    roots.push(path.dirname(require.resolve(`${PACKAGE_NAME}/package.json`)))
+  } catch {}
+  return [...new Set(roots)]
+}
+
+function candidatePaths() {
+  const out = []
+  if (process.env.APP_VITALS_NATIVE_PATH) out.push(process.env.APP_VITALS_NATIVE_PATH)
+  for (const root of packageRoots()) {
+    // Electron serves packaged apps from app.asar; native code loads from app.asar.unpacked.
+    const roots = root.includes(`app.asar${path.sep}`)
+      ? [root.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`), root]
+      : [root]
+    for (const r of roots) {
+      out.push(path.join(r, 'prebuilds', BINARY))
+      out.push(path.join(r, 'app-vitals.node')) // local `npm run build:native`
+    }
+  }
+  return out
+}
+
 let nativeAddon = null
+let nativePath = null
+let loadError = null
+const tried = []
 
-const candidatePaths = [
-  path.join(__dirname, '..', 'app-vitals.node'),
-  path.join(__dirname, '..', 'target', 'release', 'libapp_vitals_native.dylib'),
-  path.join(__dirname, '..', 'target', 'release', 'libapp_vitals_native.so'),
-  path.join(__dirname, '..', 'target', 'release', 'app_vitals_native.dll'),
-]
-
-for (const p of candidatePaths) {
-  if (fs.existsSync(p)) {
+if (process.env.APP_VITALS_DISABLE_NATIVE !== '1') {
+  for (const p of candidatePaths()) {
+    if (!fs.existsSync(p)) continue
+    tried.push(p)
     try {
       nativeAddon = require(p)
+      nativePath = p
+      loadError = null
       break
-    } catch {}
+    } catch (err) {
+      loadError = `${p}: ${err && err.message ? err.message : String(err)}`
+    }
   }
+  if (!nativeAddon && !loadError) {
+    loadError = `no native binary ${BINARY} found (looked in ${packageRoots().join(', ')})`
+  }
+} else {
+  loadError = 'disabled by APP_VITALS_DISABLE_NATIVE=1'
 }
 
 // Pure JS Fallback when native Rust addon is not compiled
@@ -129,4 +168,6 @@ const jsFallback = {
 module.exports = {
   addon: nativeAddon ? { ...nativeAddon, isNative: true } : jsFallback,
   jsFallback,
+  /** Where the native engine loaded from, or why it did not. */
+  nativeInfo: { binary: BINARY, path: nativePath, error: nativeAddon ? null : loadError, tried },
 }

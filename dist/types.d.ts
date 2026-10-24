@@ -39,6 +39,7 @@ export interface VitalsSummary {
         TTFP: {
             valueMs: number;
             rating: VitalRating;
+            samples: number;
         };
         MBR: {
             ratio: number;
@@ -49,9 +50,12 @@ export interface VitalsSummary {
         FDC: {
             dropRatePercent: number;
             rating: VitalRating;
+            samples: number;
         };
     };
     overallScore: VitalRating;
     isNativeEngine: boolean;
+    /** Why the Rust engine did not load (the JS fallback measured), or null. */
+    nativeEngineError: string | null;
     totalRecordedEvents: number;
 }

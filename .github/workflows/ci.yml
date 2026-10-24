@@ -1,43 +1,60 @@
 name: CI
 
+# Cheap by design: one Linux job per PR/push. The macOS/Windows prebuild
+# matrix (10x / 2x minute cost) only runs when started by hand.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      prebuilds:
+        description: Build the native binaries for every platform
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [macos-latest, ubuntu-latest]
-        node-version: [18.x, 20.x, 22.x]
-
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Set up Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
 
-      - name: Build Rust native addon
-        run: cargo build --release
-
-      - name: Copy native binary
-        run: |
-          if [ -f target/release/libapp_vitals_native.dylib ]; then
-            cp target/release/libapp_vitals_native.dylib app-vitals.node
-          elif [ -f target/release/libapp_vitals_native.so ]; then
-            cp target/release/libapp_vitals_native.so app-vitals.node
-          fi
-
-      - name: Build TypeScript
-        run: npm run build
-
-      - name: Run Test Suite
-        run: npm test
+  prebuilds:
+    if: github.event_name == 'workflow_dispatch' && inputs.prebuilds
+    strategy:
+      matrix:
+        include:
+          - { os: macos-14, target: aarch64-apple-darwin }
+          - { os: macos-14, target: x86_64-apple-darwin }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/build-native.cjs --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-${{ matrix.target }}
+          path: prebuilds/*.node

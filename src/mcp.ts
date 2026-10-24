@@ -10,7 +10,7 @@ export function createVitalsMcpTools(vitals: ReturnType<typeof initAppVitals>) {
       name: 'app:get_core_vitals',
       description: 'Fetch real-time Desktop Core Vitals (EST event loop stalls, IRL IPC latency, TTFP, MBR memory bloat, and FDC frame drops)',
       schema: { type: 'object', properties: {} },
-      tier: 'query',
+      tier: 'query' as const,
       handler: async () => {
         return vitals.getSummary()
       },
@@ -28,7 +28,7 @@ export function createVitalsMcpTools(vitals: ReturnType<typeof initAppVitals>) {
           maxFdcPercent: { type: 'number', description: 'Max allowed frame drop percentage (default: 2.0)' },
         },
       },
-      tier: 'query',
+      tier: 'query' as const,
       handler: async (budgets: VitalsBudgets = {}) => {
         return vitals.assertBudgets(budgets)
       },

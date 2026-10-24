@@ -93,7 +93,49 @@ pub fn get_process_memory() -> ProcessMemoryInfo {
   ProcessMemoryInfo::default()
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(target_os = "windows")]
+#[repr(C)]
+#[allow(non_snake_case)]
+struct ProcessMemoryCountersEx {
+  cb: u32,
+  PageFaultCount: u32,
+  PeakWorkingSetSize: usize,
+  WorkingSetSize: usize,
+  QuotaPeakPagedPoolUsage: usize,
+  QuotaPagedPoolUsage: usize,
+  QuotaPeakNonPagedPoolUsage: usize,
+  QuotaNonPagedPoolUsage: usize,
+  PagefileUsage: usize,
+  PeakPagefileUsage: usize,
+  PrivateUsage: usize,
+}
+
+#[cfg(target_os = "windows")]
+#[link(name = "kernel32")]
+extern "system" {
+  fn GetCurrentProcess() -> isize;
+  fn K32GetProcessMemoryInfo(process: isize, counters: *mut ProcessMemoryCountersEx, cb: u32) -> i32;
+}
+
+/// Working set as resident, private commit as the footprint (what Task
+/// Manager's commit size shows for the process).
+#[cfg(target_os = "windows")]
+pub fn get_process_memory() -> ProcessMemoryInfo {
+  let mut c: ProcessMemoryCountersEx = unsafe { std::mem::zeroed() };
+  c.cb = std::mem::size_of::<ProcessMemoryCountersEx>() as u32;
+  let ok = unsafe { K32GetProcessMemoryInfo(GetCurrentProcess(), &mut c, c.cb) };
+  if ok == 0 {
+    return ProcessMemoryInfo::default();
+  }
+  ProcessMemoryInfo {
+    resident_bytes: c.WorkingSetSize as u64,
+    virtual_bytes: c.PrivateUsage as u64,
+    physical_footprint_bytes: c.PrivateUsage as u64,
+    compressed_bytes: 0,
+  }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 pub fn get_process_memory() -> ProcessMemoryInfo {
   ProcessMemoryInfo::default()
 }

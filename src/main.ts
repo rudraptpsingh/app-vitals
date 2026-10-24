@@ -2,7 +2,7 @@ import type { VitalsBudgets, VitalsSummary, VitalRating } from './types'
 import { rateVital } from './types'
 import { evaluateVitalsBudgets } from './budgets'
 import { exportToChromeTrace } from './perfetto'
-const { addon } = require('./native-loader.cjs')
+const { addon, nativeInfo } = require('./native-loader.cjs')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -92,7 +92,10 @@ export function initAppVitals(options: AppVitalsOptions = {}) {
     const mbrRating = rateVital('MBR', mbrRatio)
 
     // Calculate composite overall health score
-    const ratings = [estRating, irlRating, ttfpRating, mbrRating, fdcRating]
+    // A vital with no samples is unmeasured, not good: leave it out of the score.
+    const ratings = [estRating, irlRating, mbrRating]
+    if (ttfpDist.count) ratings.push(ttfpRating)
+    if (fdcDist.count) ratings.push(fdcRating)
     let overallScore: VitalRating = 'good'
     if (ratings.includes('poor')) overallScore = 'poor'
     else if (ratings.includes('needs-improvement')) overallScore = 'needs-improvement'
@@ -117,6 +120,7 @@ export function initAppVitals(options: AppVitalsOptions = {}) {
         TTFP: {
           valueMs: ttfpDist.mean || 0,
           rating: ttfpRating,
+          samples: ttfpDist.count || 0,
         },
         MBR: {
           ratio: mbrRatio,
@@ -127,10 +131,12 @@ export function initAppVitals(options: AppVitalsOptions = {}) {
         FDC: {
           dropRatePercent: fdcDist.mean || 0,
           rating: fdcRating,
+          samples: fdcDist.count || 0,
         },
       },
       overallScore,
       isNativeEngine: Boolean(addon.isNative),
+      nativeEngineError: addon.isNative ? null : nativeInfo.error,
       totalRecordedEvents: allEvents.length,
     }
   }
@@ -165,6 +171,26 @@ export function initAppVitals(options: AppVitalsOptions = {}) {
 
   if (app && typeof app.on === 'function') {
     app.on('will-quit', stop)
+    // TTFP from the main process: window created -> its first paint. Needs no
+    // renderer wiring, so it works with contextIsolation and no preload change.
+    app.on('browser-window-created', (_event: any, win: any) => trackFirstPaint(win))
+  }
+
+  function trackFirstPaint(win: any) {
+    if (!win || typeof win.once !== 'function') return
+    const start = performance.now()
+    let done = false
+    const record = (source: string) => {
+      if (done) return
+      done = true
+      const value = performance.now() - start
+      addon.recordVitalMetric('TTFP', value, `window:${win.id ?? '?'}:${source}`, rateVital('TTFP', value))
+    }
+    // ready-to-show fires on the first paint; did-finish-load is the fallback
+    // for windows that never emit it.
+    win.once('ready-to-show', () => record('ready-to-show'))
+    const wc = win.webContents
+    if (wc && typeof wc.once === 'function') wc.once('did-finish-load', () => record('did-finish-load'))
   }
 
   return {
@@ -176,6 +202,7 @@ export function initAppVitals(options: AppVitalsOptions = {}) {
       const rating = rateVital(vital as any, value)
       addon.recordVitalMetric(vital, value, label || null, rating)
     },
+    trackWindow: trackFirstPaint,
     getEvents: () => addon.getVitalEvents(),
     clearEvents: () => addon.clearVitalEvents(),
   }

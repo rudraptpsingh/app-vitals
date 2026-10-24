@@ -1,19 +1,18 @@
 {
-  "name": "app-vitals",
-  "version": "0.1.0",
+  "name": "electron-app-vitals",
+  "version": "0.2.0",
   "description": "Zero-overhead, Rust-powered Core Desktop Vitals for Electron and native applications (TTFP, EST, IRL, MBR, FDC)",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "src/native-loader.cjs",
-    "app-vitals.node",
+    "prebuilds/*.node",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build:native": "cargo build --release && cp target/release/libapp_vitals_native.dylib ./app-vitals.node",
-    "build:ts": "tsc && cp src/native-loader.cjs dist/",
+    "build:native": "node scripts/build-native.cjs",
+    "build:ts": "tsc && node -e \"require('fs').copyFileSync('src/native-loader.cjs','dist/native-loader.cjs')\"",
     "build": "npm run build:native && npm run build:ts",
     "test": "node --test test/*.test.js"
   },
@@ -33,5 +32,12 @@
   "license": "MIT",
   "devDependencies": {
     "typescript": "^5.8.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rudraptpsingh/app-vitals.git"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

@@ -13,6 +13,7 @@ export declare function initAppVitals(options?: AppVitalsOptions): {
     exportTrace: (outputPath?: string) => import("./perfetto").ChromeTraceFormat;
     stop: () => void;
     recordVital: (vital: string, value: number, label?: string) => void;
+    trackWindow: (win: any) => void;
     getEvents: () => any;
     clearEvents: () => any;
 };

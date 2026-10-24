@@ -4,7 +4,7 @@ exports.initAppVitals = initAppVitals;
 const types_1 = require("./types");
 const budgets_1 = require("./budgets");
 const perfetto_1 = require("./perfetto");
-const { addon } = require('./native-loader.cjs');
+const { addon, nativeInfo } = require('./native-loader.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 function initAppVitals(options = {}) {
@@ -69,7 +69,12 @@ function initAppVitals(options = {}) {
         const mbrRatio = v8HeapMb > 0 ? Number((footprintMb / v8HeapMb).toFixed(2)) : 1.0;
         const mbrRating = (0, types_1.rateVital)('MBR', mbrRatio);
         // Calculate composite overall health score
-        const ratings = [estRating, irlRating, ttfpRating, mbrRating, fdcRating];
+        // A vital with no samples is unmeasured, not good: leave it out of the score.
+        const ratings = [estRating, irlRating, mbrRating];
+        if (ttfpDist.count)
+            ratings.push(ttfpRating);
+        if (fdcDist.count)
+            ratings.push(fdcRating);
         let overallScore = 'good';
         if (ratings.includes('poor'))
             overallScore = 'poor';
@@ -94,6 +99,7 @@ function initAppVitals(options = {}) {
                 TTFP: {
                     valueMs: ttfpDist.mean || 0,
                     rating: ttfpRating,
+                    samples: ttfpDist.count || 0,
                 },
                 MBR: {
                     ratio: mbrRatio,
@@ -104,10 +110,12 @@ function initAppVitals(options = {}) {
                 FDC: {
                     dropRatePercent: fdcDist.mean || 0,
                     rating: fdcRating,
+                    samples: fdcDist.count || 0,
                 },
             },
             overallScore,
             isNativeEngine: Boolean(addon.isNative),
+            nativeEngineError: addon.isNative ? null : nativeInfo.error,
             totalRecordedEvents: allEvents.length,
         };
     }
@@ -140,6 +148,28 @@ function initAppVitals(options = {}) {
     }
     if (app && typeof app.on === 'function') {
         app.on('will-quit', stop);
+        // TTFP from the main process: window created -> its first paint. Needs no
+        // renderer wiring, so it works with contextIsolation and no preload change.
+        app.on('browser-window-created', (_event, win) => trackFirstPaint(win));
+    }
+    function trackFirstPaint(win) {
+        if (!win || typeof win.once !== 'function')
+            return;
+        const start = performance.now();
+        let done = false;
+        const record = (source) => {
+            if (done)
+                return;
+            done = true;
+            const value = performance.now() - start;
+            addon.recordVitalMetric('TTFP', value, `window:${win.id ?? '?'}:${source}`, (0, types_1.rateVital)('TTFP', value));
+        };
+        // ready-to-show fires on the first paint; did-finish-load is the fallback
+        // for windows that never emit it.
+        win.once('ready-to-show', () => record('ready-to-show'));
+        const wc = win.webContents;
+        if (wc && typeof wc.once === 'function')
+            wc.once('did-finish-load', () => record('did-finish-load'));
     }
     return {
         getSummary,
@@ -150,6 +180,7 @@ function initAppVitals(options = {}) {
             const rating = (0, types_1.rateVital)(vital, value);
             addon.recordVitalMetric(vital, value, label || null, rating);
         },
+        trackWindow: trackFirstPaint,
         getEvents: () => addon.getVitalEvents(),
         clearEvents: () => addon.clearVitalEvents(),
     };

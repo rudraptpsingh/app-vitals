@@ -16,7 +16,7 @@ export declare function createVitalsMcpTools(vitals: ReturnType<typeof initAppVi
             maxFdcPercent?: undefined;
         };
     };
-    tier: string;
+    tier: "query";
     handler: () => Promise<import("./types").VitalsSummary>;
 } | {
     name: string;
@@ -46,6 +46,6 @@ export declare function createVitalsMcpTools(vitals: ReturnType<typeof initAppVi
             };
         };
     };
-    tier: string;
+    tier: "query";
     handler: (budgets?: VitalsBudgets) => Promise<import("./budgets").BudgetEvaluationResult>;
 })[];

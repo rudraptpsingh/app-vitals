@@ -1,4 +1,4 @@
-# app-vitals ⚡
+# electron-app-vitals
 
 > **Zero-overhead, Rust-powered Core Desktop Vitals for Electron and native applications.**  
 > Measure, monitor, and enforce SLAs across the 5 Core Vitals: **EST**, **IRL**, **TTFP**, **MBR**, and **FDC**.
@@ -11,7 +11,7 @@ In web development, every engineer knows Google's **Web Vitals** (`LCP`, `INP`, 
 
 **Desktop and Electron applications have had no equivalent standard.** When an Electron app feels "sluggish," teams argue in circles without knowing whether the problem is main-process event-loop freezes, contextBridge IPC serialization overhead, native memory leaks, or renderer frame drops during virtualized scrolling.
 
-**`app-vitals`** defines and measures the **5 Core Desktop Vitals** backed by an independent, zero-overhead **Rust native engine**:
+**`electron-app-vitals`** defines and measures the **5 Core Desktop Vitals** backed by an independent, zero-overhead **Rust native engine**:
 
 ```mermaid
 flowchart TD
@@ -62,7 +62,7 @@ flowchart TD
 ### 1. Installation
 
 ```bash
-npm install app-vitals
+npm install electron-app-vitals
 ```
 
 ### 2. Main Process Setup (1 Line)
@@ -70,7 +70,7 @@ npm install app-vitals
 ```javascript
 // In main.js / main.ts
 const { app, ipcMain } = require('electron')
-const { initAppVitals } = require('app-vitals')
+const { initAppVitals } = require('electron-app-vitals')
 
 const vitals = initAppVitals({
   app,
@@ -90,11 +90,32 @@ const summary = vitals.getSummary()
 console.log(summary)
 ```
 
-### 3. Renderer Process Setup
+TTFP is measured in the main process with no renderer code: for every
+`BrowserWindow`, the time from creation to its first paint (`ready-to-show`,
+or `did-finish-load` for windows that never emit it). Call `initAppVitals`
+before creating windows. `vitals.trackWindow(win)` adds a window created earlier.
+
+A vital with no samples reports `samples: 0` and does not count toward
+`overallScore`.
+
+### Bundlers and packaged apps
+
+The Rust engine ships as `prebuilds/app-vitals.<platform>-<arch>.node`
+(darwin-arm64, darwin-x64, win32-x64; Linux builds from source with
+`npm run build:native`). If your main process is bundled (esbuild, vite,
+webpack), the loader still finds the package in `node_modules`, but marking
+`electron-app-vitals` as external is simpler. In a packaged Electron app add
+`**/node_modules/electron-app-vitals/**` to `asarUnpack`.
+
+`getSummary().isNativeEngine` says which engine measured; when it is `false`,
+`nativeEngineError` says why. `APP_VITALS_NATIVE_PATH` points the loader at a
+binary anywhere; `APP_VITALS_DISABLE_NATIVE=1` forces the JS fallback.
+
+### 3. Renderer Process Setup (optional: frame drops)
 
 ```javascript
 // In renderer index.tsx / index.html
-import { initRendererVitals } from 'app-vitals'
+import { initRendererVitals } from 'electron-app-vitals'
 
 initRendererVitals({
   reportIntervalMs: 3000, // Flushes frame drop rate every 3 seconds
@@ -105,10 +126,10 @@ initRendererVitals({
 
 ## AI Agent & Model Context Protocol (MCP) Integration
 
-`app-vitals` natively exports agent-callable tools compatible with [`electron-mcp-bridge`](https://github.com/rudraptpsingh/electron-mcp-bridge) and any MCP client (Claude Desktop, Cursor, Antigravity):
+`electron-app-vitals` exports agent-callable tools compatible with [`electron-mcp-bridge`](https://github.com/rudraptpsingh/electron-mcp-bridge) and any MCP client (Claude Desktop, Cursor, Antigravity):
 
 ```javascript
-const { createVitalsMcpTools } = require('app-vitals')
+const { createVitalsMcpTools } = require('electron-app-vitals')
 const { setupMcpBridge } = require('electron-mcp-bridge')
 
 setupMcpBridge({
@@ -148,7 +169,7 @@ vitals.exportTrace('./diagnostics/session.trace.json')
 
 JavaScript watchdogs run on Node.js's libuv event loop. **If the event loop freezes, the watchdog freezes too.**
 
-`app-vitals` compiles a native Rust engine (`app-vitals-native`) that:
+`electron-app-vitals` compiles a native Rust engine (`app-vitals-native`) that:
 1. Spawns an independent native OS thread with high-precision monotonic clock sampling (`std::time::Instant`).
 2. Directly inspects Mach kernel VM task structures (`task_info` on macOS) and `/proc/self/statm` on Linux in microseconds.
 3. Records telemetry into an atomic lock-free ring buffer with **zero V8 heap allocations and zero GC pressure**.
