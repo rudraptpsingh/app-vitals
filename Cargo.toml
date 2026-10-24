@@ -1,0 +1,24 @@
+[package]
+name = "app-vitals-native"
+version = "0.1.0"
+edition = "2021"
+description = "Zero-overhead native Rust engine for app-vitals (watchdog, native memory, and ring buffers)"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/native/lib.rs"
+
+[dependencies]
+napi = { version = "2", default-features = false, features = ["napi8"] }
+napi-derive = "2"
+once_cell = "1.20"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = "symbols"

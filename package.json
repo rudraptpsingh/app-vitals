@@ -1,0 +1,37 @@
+{
+  "name": "app-vitals",
+  "version": "0.1.0",
+  "description": "Zero-overhead, Rust-powered Core Desktop Vitals for Electron and native applications (TTFP, EST, IRL, MBR, FDC)",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src/native-loader.cjs",
+    "app-vitals.node",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build:native": "cargo build --release && cp target/release/libapp_vitals_native.dylib ./app-vitals.node",
+    "build:ts": "tsc && cp src/native-loader.cjs dist/",
+    "build": "npm run build:native && npm run build:ts",
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "electron",
+    "desktop",
+    "vitals",
+    "web-vitals",
+    "performance",
+    "rust",
+    "telemetry",
+    "stall-detection",
+    "ipc",
+    "mcp"
+  ],
+  "author": "Rudra Pratap Singh",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}
