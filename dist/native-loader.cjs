@@ -114,7 +114,7 @@ const jsFallback = {
     if (values.length === 0) {
       return { count: 0, min: 0, max: 0, mean: 0, p50: 0, p90: 0, p95: 0, p99: 0 }
     }
-    const count = values.len
+    const count = values.length
     const min = values[0]
     const max = values[values.length - 1]
     const mean = values.reduce((a, b) => a + b, 0) / values.length
@@ -122,10 +122,11 @@ const jsFallback = {
     const p90 = values[Math.min(values.length - 1, Math.floor(values.length * 0.9))]
     const p95 = values[Math.min(values.length - 1, Math.floor(values.length * 0.95))]
     const p99 = values[Math.min(values.length - 1, Math.floor(values.length * 0.99))]
-    return { count: values.length, min, max, mean, p50, p90, p95, p99 }
+    return { count, min, max, mean, p50, p90, p95, p99 }
   },
 }
 
 module.exports = {
   addon: nativeAddon ? { ...nativeAddon, isNative: true } : jsFallback,
+  jsFallback,
 }
